@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className={`${geist.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-amber-50/30 text-stone-900">
+      <body className="min-h-full flex flex-col bg-white text-gray-900">
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
