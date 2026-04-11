@@ -40,16 +40,16 @@ export default function DashboardPage() {
   }, [user]);
 
   if (loading || fetching) {
-    return <div className="min-h-screen flex items-center justify-center text-stone-400 text-sm">불러오는 중...</div>;
+    return <div className="min-h-screen flex items-center justify-center text-stone-400 text-sm bg-amber-50/30">불러오는 중...</div>;
   }
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <nav className="bg-white border-b border-stone-100 px-6 py-4 flex items-center justify-between">
-        <Link href="/" className="text-lg font-bold text-stone-800">The Untold</Link>
+    <div className="min-h-screen bg-amber-50/30">
+      <nav className="bg-white/90 backdrop-blur border-b border-amber-100 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+        <Link href="/" className="text-lg font-bold text-amber-900">The Untold</Link>
         <div className="flex items-center gap-4">
           <span className="text-sm text-stone-400">{user?.displayName || user?.email}</span>
-          <button onClick={logout} className="text-sm text-stone-400 hover:text-stone-700 transition-colors">
+          <button onClick={logout} className="text-sm text-stone-400 hover:text-amber-700 transition-colors">
             로그아웃
           </button>
         </div>
@@ -62,18 +62,18 @@ export default function DashboardPage() {
             <p className="text-sm text-stone-400 mt-1">총 {spaces.length}개의 공간</p>
           </div>
           <Link href="/create"
-            className="bg-stone-900 text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-stone-700 transition-colors">
+            className="bg-amber-500 text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-amber-600 transition-colors shadow-sm shadow-amber-200">
             + 새 추모 공간
           </Link>
         </div>
 
         {spaces.length === 0 ? (
           <div className="text-center py-24 text-stone-400">
-            <div className="text-4xl mb-4">🕯️</div>
+            <div className="text-5xl mb-4">🌿</div>
             <p className="font-semibold text-stone-600 mb-2">아직 만든 추모 공간이 없습니다</p>
             <p className="text-sm mb-6">소중한 분의 이야기를 담을 공간을 만들어보세요.</p>
             <Link href="/create"
-              className="bg-stone-900 text-white px-6 py-2.5 rounded-full text-sm font-semibold hover:bg-stone-700 transition-colors">
+              className="bg-amber-500 text-white px-6 py-2.5 rounded-full text-sm font-semibold hover:bg-amber-600 transition-colors">
               첫 추모 공간 만들기
             </Link>
           </div>
@@ -81,8 +81,8 @@ export default function DashboardPage() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {spaces.map(space => (
               <Link key={space.id} href={`/memorial/${space.slug}`}
-                className="bg-white rounded-2xl p-6 border border-stone-100 hover:shadow-md transition-shadow">
-                <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center text-xl mb-4">🕯️</div>
+                className="bg-white rounded-3xl p-6 border border-amber-100 hover:shadow-md hover:shadow-amber-100 transition-shadow">
+                <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-xl mb-4">🌿</div>
                 <h3 className="font-bold text-stone-800 mb-1">{space.name}</h3>
                 <p className="text-xs text-stone-400">
                   {space.birth_year}{space.birth_year && space.death_year && ' — '}{space.death_year}
