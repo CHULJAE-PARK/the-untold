@@ -71,7 +71,7 @@ export default function CreatePage() {
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-600">이름 *</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)} required
-              className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+              className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
               placeholder="고인의 이름" />
           </div>
 
@@ -79,13 +79,13 @@ export default function CreatePage() {
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-gray-600">출생 연도</label>
               <input type="number" value={birthYear} onChange={e => setBirthYear(e.target.value)}
-                className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+                className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
                 placeholder="예: 1945" min="1800" max="2100" />
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-gray-600">별세 연도</label>
               <input type="number" value={deathYear} onChange={e => setDeathYear(e.target.value)}
-                className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+                className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
                 placeholder="예: 2023" min="1800" max="2100" />
             </div>
           </div>
@@ -93,7 +93,7 @@ export default function CreatePage() {
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-600">소개 (선택)</label>
             <textarea value={bio} onChange={e => setBio(e.target.value)} rows={4}
-              className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white resize-none"
+              className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white resize-none"
               placeholder="고인에 대한 짧은 소개를 적어주세요..." />
           </div>
 
