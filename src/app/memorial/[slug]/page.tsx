@@ -4,8 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, updateDoc, orderBy } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 
 interface MemorialSpace {
@@ -91,13 +90,23 @@ export default function MemorialPage() {
     setSubmitting(false);
   }
 
+  async function uploadToCloudinary(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!);
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/upload`,
+      { method: 'POST', body: formData }
+    );
+    const data = await res.json();
+    return data.secure_url;
+  }
+
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
     if (!space || !e.target.files?.[0]) return;
     const file = e.target.files[0];
     setUploading(true);
-    const storageRef = ref(storage, `memorial_spaces/${space.id}/media/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
+    const url = await uploadToCloudinary(file);
     await addDoc(collection(db, 'memorial_spaces', space.id, 'media'), {
       url,
       type: file.type.startsWith('video/') ? 'video' : 'image',
@@ -115,9 +124,7 @@ export default function MemorialPage() {
     if (!space || !e.target.files?.[0]) return;
     setUploadingProfile(true);
     const file = e.target.files[0];
-    const storageRef = ref(storage, `memorial_spaces/${space.id}/profile`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
+    const url = await uploadToCloudinary(file);
     await updateDoc(doc(db, 'memorial_spaces', space.id), { photo_url: url });
     setSpace(prev => prev ? { ...prev, photo_url: url } : prev);
     setUploadingProfile(false);
