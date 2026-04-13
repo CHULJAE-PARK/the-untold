@@ -38,13 +38,13 @@ export default function LoginPage() {
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-600">이메일</label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-              className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+              className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
               placeholder="name@example.com" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-600">비밀번호</label>
             <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-              className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+              className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
               placeholder="••••••••" />
           </div>
           <button type="submit" disabled={loading}
