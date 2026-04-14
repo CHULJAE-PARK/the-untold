@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   collection, query, where, getDocs, addDoc,
@@ -53,6 +53,7 @@ interface MediaItem {
 export default function MemorialPage() {
   const { slug } = useParams<{ slug: string }>();
   const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
 
   const [space, setSpace] = useState<MemorialSpace | null>(null);
   const [member, setMember] = useState<Member | null>(null);
