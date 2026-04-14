@@ -193,3 +193,53 @@ export async function markInviteUsed(token: string, usedByUid: string): Promise<
     used_by: usedByUid,
   });
 }
+
+// ---- 공간 관리 ----
+
+export async function updateSpace(
+  spaceId: string,
+  data: { name?: string; bio?: string | null; birth_year?: number | null; death_year?: number | null }
+): Promise<void> {
+  await updateDoc(doc(db, 'memorial_spaces', spaceId), {
+    ...data,
+    updated_at: serverTimestamp(),
+  });
+}
+
+export async function deleteMessage(spaceId: string, messageId: string): Promise<void> {
+  await deleteDoc(doc(db, 'memorial_spaces', spaceId, 'messages', messageId));
+}
+
+export async function deleteMediaItem(spaceId: string, mediaId: string): Promise<void> {
+  await deleteDoc(doc(db, 'memorial_spaces', spaceId, 'media', mediaId));
+}
+
+async function deleteAllDocsInCollection(path: string): Promise<void> {
+  const snap = await getDocs(collection(db, path));
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+}
+
+export async function hardDeleteSpace(spaceId: string): Promise<void> {
+  // 하위 컬렉션 전부 삭제
+  await deleteAllDocsInCollection(`memorial_spaces/${spaceId}/members`);
+  await deleteAllDocsInCollection(`memorial_spaces/${spaceId}/messages`);
+  await deleteAllDocsInCollection(`memorial_spaces/${spaceId}/media`);
+  await deleteAllDocsInCollection(`memorial_spaces/${spaceId}/join_requests`);
+
+  // 관련 초대 토큰 삭제
+  const inviteSnap = await getDocs(query(collection(db, 'invites'), where('space_id', '==', spaceId)));
+  await Promise.all(inviteSnap.docs.map(d => deleteDoc(d.ref)));
+
+  // 공간 문서 삭제
+  await deleteDoc(doc(db, 'memorial_spaces', spaceId));
+}
+
+export async function deleteUserAccount(uid: string): Promise<void> {
+  // 소유 공간 soft-delete
+  const ownedSnap = await getDocs(query(collection(db, 'memorial_spaces'), where('created_by', '==', uid)));
+  await Promise.all(ownedSnap.docs.map(d => updateDoc(d.ref, { is_deleted: true, deleted_at: serverTimestamp() })));
+
+  // 모든 멤버십 삭제
+  const memberSnap = await getDocs(query(collectionGroup(db, 'members'), where('uid', '==', uid)));
+  await Promise.all(memberSnap.docs.map(d => deleteDoc(d.ref)));
+}

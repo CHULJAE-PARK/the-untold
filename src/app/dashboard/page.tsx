@@ -90,6 +90,7 @@ export default function DashboardPage() {
         <Link href="/" className="text-base font-bold text-gray-900">The Untold</Link>
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-400">{user?.displayName || user?.email}</span>
+          <Link href="/settings" className="text-sm text-gray-400 hover:text-gray-900 transition-colors">설정</Link>
           <button onClick={logout} className="text-sm text-gray-400 hover:text-gray-900 transition-colors">
             로그아웃
           </button>

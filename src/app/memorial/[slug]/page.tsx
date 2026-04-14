@@ -14,7 +14,7 @@ import {
   getPendingRequests, approveJoinRequest, rejectJoinRequest,
   updateMemberDisplayName, createInviteToken,
   getMembers, kickMember, hideMember, unhideMember,
-  softDeleteSpace,
+  softDeleteSpace, updateSpace, deleteMessage, deleteMediaItem, hardDeleteSpace,
   type Member, type JoinRequest,
 } from '@/lib/db';
 
@@ -86,6 +86,14 @@ export default function MemorialPage() {
   const [showEditNameModal, setShowEditNameModal] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [deletingSpace, setDeletingSpace] = useState(false);
+
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsName, setSettingsName] = useState('');
+  const [settingsBio, setSettingsBio] = useState('');
+  const [settingsBirthYear, setSettingsBirthYear] = useState('');
+  const [settingsDeathYear, setSettingsDeathYear] = useState('');
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [hardDeleting, setHardDeleting] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -237,6 +245,58 @@ export default function MemorialPage() {
     setDeletingSpace(true);
     await softDeleteSpace(space.id);
     router.push('/dashboard');
+  }
+
+  function handleOpenSettings() {
+    if (!space) return;
+    setSettingsName(space.name);
+    setSettingsBio(space.bio || '');
+    setSettingsBirthYear(space.birth_year?.toString() || '');
+    setSettingsDeathYear(space.death_year?.toString() || '');
+    setShowSettingsModal(true);
+  }
+
+  async function handleSaveSettings() {
+    if (!space || !settingsName.trim()) return;
+    setSavingSettings(true);
+    const data = {
+      name: settingsName.trim(),
+      bio: settingsBio.trim() || null,
+      birth_year: settingsBirthYear ? Number(settingsBirthYear) : null,
+      death_year: settingsDeathYear ? Number(settingsDeathYear) : null,
+    };
+    await updateSpace(space.id, data);
+    setSpace(prev => prev ? {
+      ...prev,
+      name: data.name,
+      bio: data.bio ?? undefined,
+      birth_year: data.birth_year ?? undefined,
+      death_year: data.death_year ?? undefined,
+    } : prev);
+    setShowSettingsModal(false);
+    setSavingSettings(false);
+  }
+
+  async function handleHardDelete() {
+    if (!space) return;
+    if (!confirm(`"${space.name}" 공간을 영구 삭제하시겠습니까?\n모든 추모글, 사진, 멤버 정보가 삭제되며 복구할 수 없습니다.`)) return;
+    const typed = prompt(`삭제를 확인하려면 공간 이름 "${space.name}"을(를) 입력하세요:`);
+    if (typed !== space.name) { alert('이름이 일치하지 않습니다.'); return; }
+    setHardDeleting(true);
+    await hardDeleteSpace(space.id);
+    router.push('/dashboard');
+  }
+
+  async function handleDeleteMsg(msgId: string) {
+    if (!space || !confirm('이 추모글을 삭제하시겠습니까?')) return;
+    await deleteMessage(space.id, msgId);
+    setMessages(prev => prev.filter(m => m.id !== msgId));
+  }
+
+  async function handleDeleteMedia(mediaId: string) {
+    if (!space || !confirm('이 미디어를 삭제하시겠습니까?')) return;
+    await deleteMediaItem(space.id, mediaId);
+    setMedia(prev => prev.filter(m => m.id !== mediaId));
   }
 
   async function handleTabChange(t: 'messages' | 'media' | 'members') {
@@ -444,6 +504,66 @@ export default function MemorialPage() {
         </div>
       )}
 
+      {/* 공간 설정 모달 */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl p-8 w-full max-w-sm flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+            <div>
+              <h2 className="text-base font-bold text-gray-900 mb-1">공간 설정</h2>
+              <p className="text-sm text-gray-500">공간 정보를 수정합니다.</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">이름 *</label>
+                <input type="text" value={settingsName} onChange={e => setSettingsName(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">소개</label>
+                <textarea value={settingsBio} onChange={e => setSettingsBio(e.target.value)} rows={3}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 resize-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 mb-1 block">출생 연도</label>
+                  <input type="number" value={settingsBirthYear} onChange={e => setSettingsBirthYear(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    placeholder="1950" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 mb-1 block">사망 연도</label>
+                  <input type="number" value={settingsDeathYear} onChange={e => setSettingsDeathYear(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                    placeholder="2024" />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowSettingsModal(false)}
+                className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors">
+                취소
+              </button>
+              <button onClick={handleSaveSettings}
+                disabled={savingSettings || !settingsName.trim()}
+                className="flex-1 bg-gray-900 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50">
+                {savingSettings ? '저장 중...' : '저장'}
+              </button>
+            </div>
+
+            {/* 위험 영역 */}
+            <div className="border-t border-gray-200 pt-4 mt-2">
+              <p className="text-xs font-semibold text-red-500 mb-2">위험 영역</p>
+              <p className="text-xs text-gray-400 mb-3">공간을 영구 삭제하면 모든 추모글, 사진, 멤버 정보가 삭제되며 복구할 수 없습니다.</p>
+              <button onClick={handleHardDelete}
+                disabled={hardDeleting}
+                className="w-full text-xs text-red-500 border border-red-200 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50">
+                {hardDeleting ? '삭제 중...' : '공간 영구 삭제'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <nav className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <Link href="/" className="text-base font-bold text-gray-900">The Untold</Link>
         <div className="flex items-center gap-3">
@@ -513,15 +633,16 @@ export default function MemorialPage() {
         </div>
       )}
 
-      {/* 방장: 공간 숨김 처리 */}
+      {/* 방장: 공간 관리 */}
       {isOwner && (
-        <div className="bg-red-50 border-b border-red-100">
-          <div className="max-w-2xl mx-auto px-6 py-3 flex items-center justify-between">
-            <p className="text-xs text-red-400">공간을 숨김 처리하면 대시보드에서 보이지 않습니다</p>
-            <button
-              onClick={handleDeleteSpace}
-              disabled={deletingSpace}
-              className="text-xs text-red-500 border border-red-200 px-4 py-1.5 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50">
+        <div className="bg-gray-50 border-b border-gray-200">
+          <div className="max-w-2xl mx-auto px-6 py-3 flex items-center justify-end gap-2">
+            <button onClick={handleOpenSettings}
+              className="text-xs text-gray-600 border border-gray-300 px-4 py-1.5 rounded-lg hover:bg-white transition-colors">
+              공간 설정
+            </button>
+            <button onClick={handleDeleteSpace} disabled={deletingSpace}
+              className="text-xs text-red-500 border border-red-200 px-4 py-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50">
               {deletingSpace ? '처리 중...' : '공간 숨기기'}
             </button>
           </div>
@@ -604,7 +725,13 @@ export default function MemorialPage() {
                 <div key={msg.id} className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-semibold text-gray-800">{msg.author_name}</span>
-                    <span className="text-xs text-gray-400">{msg.created_at?.toDate?.()?.toLocaleDateString('ko-KR') ?? ''}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">{msg.created_at?.toDate?.()?.toLocaleDateString('ko-KR') ?? ''}</span>
+                      {(isOwner || msg.author_uid === user?.uid) && (
+                        <button onClick={() => handleDeleteMsg(msg.id)}
+                          className="text-xs text-gray-300 hover:text-red-500 transition-colors" title="삭제">✕</button>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                 </div>
@@ -634,11 +761,16 @@ export default function MemorialPage() {
               : (
                 <div className="grid grid-cols-2 gap-3">
                   {media.filter(item => !item.author_uid || !member?.hidden_member_uids.includes(item.author_uid)).map(item => (
-                    <div key={item.id} className="rounded-xl overflow-hidden bg-gray-100 aspect-square relative">
+                    <div key={item.id} className="rounded-xl overflow-hidden bg-gray-100 aspect-square relative group">
                       {item.type === 'video'
                         ? <video src={item.url} controls className="w-full h-full object-cover" />
                         : <img src={item.url} alt="" className="w-full h-full object-cover" />
                       }
+                      {(isOwner || item.author_uid === user?.uid) && (
+                        <button onClick={() => handleDeleteMedia(item.id)}
+                          className="absolute top-2 right-2 w-6 h-6 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-xs transition-colors opacity-0 group-hover:opacity-100"
+                          title="삭제">✕</button>
+                      )}
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent px-3 py-2">
                         <span className="text-xs text-white">{item.author_name}</span>
                       </div>
