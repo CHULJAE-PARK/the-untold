@@ -38,8 +38,8 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     async function load() {
-      // 내가 멤버인 공간 ID (collectionGroup, uid 필드 있는 것)
-      const memberSpaceIds = await getMyMemberSpaceIds(user!.uid);
+      // 내가 멤버인 공간 ID (collectionGroup, uid 필드 있는 것 — 구형 데이터는 없을 수 있음)
+      const memberSpaceIds = await getMyMemberSpaceIds(user!.uid).catch(() => [] as string[]);
 
       // 내가 만든 공간 ID (uid 필드 없는 기존 데이터 fallback)
       const ownedSnap = await getDocs(query(
