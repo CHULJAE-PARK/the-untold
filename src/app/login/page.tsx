@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
 function LoginForm() {
@@ -15,6 +15,7 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleLogin(e: React.FormEvent) {
@@ -30,26 +31,59 @@ function LoginForm() {
     }
   }
 
+  async function handleGoogle() {
+    setGoogleLoading(true);
+    setError('');
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+      router.push(redirect || '/dashboard');
+    } catch {
+      setError('Google 로그인에 실패했습니다.');
+      setGoogleLoading(false);
+    }
+  }
+
   return (
-    <form onSubmit={handleLogin} className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm flex flex-col gap-4">
-      {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">{error}</div>}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold text-gray-600">이메일</label>
-        <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-          className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
-          placeholder="name@example.com" />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-semibold text-gray-600">비밀번호</label>
-        <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-          className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
-          placeholder="••••••••" />
-      </div>
-      <button type="submit" disabled={loading}
-        className="bg-gray-900 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50 mt-2">
-        {loading ? '로그인 중...' : '로그인'}
+    <div className="flex flex-col gap-4">
+      <button
+        onClick={handleGoogle}
+        disabled={googleLoading}
+        className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 rounded-lg py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 shadow-sm">
+        <svg width="18" height="18" viewBox="0 0 18 18">
+          <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+          <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+          <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+        </svg>
+        {googleLoading ? '로그인 중...' : 'Google로 로그인'}
       </button>
-    </form>
+
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-gray-200" />
+        <span className="text-xs text-gray-400">또는</span>
+        <div className="flex-1 h-px bg-gray-200" />
+      </div>
+
+      <form onSubmit={handleLogin} className="flex flex-col gap-4">
+        {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-4 py-3">{error}</div>}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-gray-600">이메일</label>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
+            className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+            placeholder="name@example.com" />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-gray-600">비밀번호</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
+            className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 bg-white"
+            placeholder="••••••••" />
+        </div>
+        <button type="submit" disabled={loading}
+          className="bg-gray-900 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50">
+          {loading ? '로그인 중...' : '이메일로 로그인'}
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -61,9 +95,11 @@ export default function LoginPage() {
           <Link href="/" className="text-base font-bold text-gray-900">The Untold</Link>
           <p className="text-sm text-gray-500 mt-2">로그인하여 계속하세요</p>
         </div>
-        <Suspense fallback={<div className="h-48 bg-white rounded-2xl border border-gray-200" />}>
-          <LoginForm />
-        </Suspense>
+        <div className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm">
+          <Suspense fallback={<div className="h-48" />}>
+            <LoginForm />
+          </Suspense>
+        </div>
         <p className="text-center text-sm text-gray-400 mt-6">
           아직 계정이 없으신가요?{' '}
           <Link href="/signup" className="text-gray-900 font-semibold hover:underline">회원가입</Link>
