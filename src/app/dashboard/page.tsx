@@ -38,12 +38,22 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!user) return;
     async function load() {
-      // 내가 멤버인 모든 공간 ID 조회
-      const spaceIds = await getMyMemberSpaceIds(user!.uid);
-      if (spaceIds.length === 0) { setFetching(false); return; }
+      // 내가 멤버인 공간 ID (collectionGroup, uid 필드 있는 것)
+      const memberSpaceIds = await getMyMemberSpaceIds(user!.uid);
+
+      // 내가 만든 공간 ID (uid 필드 없는 기존 데이터 fallback)
+      const ownedSnap = await getDocs(query(
+        collection(db, 'memorial_spaces'),
+        where('created_by', '==', user!.uid)
+      ));
+      const ownedIds = ownedSnap.docs.map(d => d.id);
+
+      // 중복 없이 합치기
+      const allIds = Array.from(new Set([...memberSpaceIds, ...ownedIds]));
+      if (allIds.length === 0) { setFetching(false); return; }
 
       // 각 공간 문서 조회
-      const spaceDocs = await Promise.all(spaceIds.map(id => getDoc(doc(db, 'memorial_spaces', id))));
+      const spaceDocs = await Promise.all(allIds.map(id => getDoc(doc(db, 'memorial_spaces', id))));
       const rawSpaces = spaceDocs
         .filter(d => d.exists() && !d.data()?.is_deleted)
         .map(d => ({ id: d.id, ...d.data() } as MemorialSpace));
