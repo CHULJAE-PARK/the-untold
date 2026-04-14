@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -77,17 +77,18 @@ function CommentSection({
   const [submitting, setSubmitting] = useState(false);
   const [count, setCount] = useState(0);
 
-  const loadComments = useCallback(async () => {
-    const list = await getComments(spaceId, parentCollection, parentId);
-    setComments(list);
-    setCount(list.length);
-    setLoaded(true);
-  }, [spaceId, parentCollection, parentId]);
-
   useEffect(() => {
-    // 처음엔 카운트만 로드
+    let cancelled = false;
+    async function loadComments() {
+      const list = await getComments(spaceId, parentCollection, parentId);
+      if (cancelled) return;
+      setComments(list);
+      setCount(list.length);
+      setLoaded(true);
+    }
     loadComments();
-  }, [loadComments]);
+    return () => { cancelled = true; };
+  }, [spaceId, parentCollection, parentId]);
 
   async function handleSubmit() {
     if (!text.trim()) return;
@@ -277,12 +278,14 @@ export default function MemorialPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    setLoading(true);
+
+    let cancelled = false;
 
     async function load() {
       try {
         const q = query(collection(db, 'memorial_spaces'), where('slug', '==', slug));
         const snap = await getDocs(q);
+        if (cancelled) return;
         if (snap.empty) { setNotFound(true); setLoading(false); return; }
 
         const spaceDoc = snap.docs[0];
@@ -291,6 +294,7 @@ export default function MemorialPage() {
 
         if (user) {
           const m = await getMember(spaceDoc.id, user.uid);
+          if (cancelled) return;
           if (m) {
             setMember(m);
             if (!m.space_display_name) {
@@ -302,25 +306,30 @@ export default function MemorialPage() {
               getDocs(query(collection(db, 'memorial_spaces', spaceDoc.id, 'media'), orderBy('created_at', 'desc'))),
               m.role === 'owner' ? getPendingRequests(spaceDoc.id) : Promise.resolve([] as JoinRequest[]),
             ]);
+            if (cancelled) return;
             setMessages(msgSnap.docs.map(d => ({ id: d.id, ...d.data() } as Message)));
             setMedia(mediaSnap.docs.map(d => ({ id: d.id, ...d.data() } as MediaItem)));
             setPendingRequests(reqs);
           } else {
             const req = await getMyJoinRequest(spaceDoc.id, user.uid);
+            if (cancelled) return;
             if (req) {
               setHasRequest(true);
               setRequestStatus(req.status as 'pending' | 'rejected');
             }
           }
         }
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       } catch (err) {
+        if (cancelled) return;
         console.error('[memorial] load error:', err);
         setNotFound(true);
         setLoading(false);
       }
     }
     load();
+
+    return () => { cancelled = true; };
   }, [slug, user, authLoading]);
 
   async function uploadToCloudinary(file: File): Promise<string> {
