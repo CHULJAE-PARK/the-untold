@@ -13,6 +13,7 @@ import {
   getMember, getMyJoinRequest, submitJoinRequest,
   getPendingRequests, approveJoinRequest, rejectJoinRequest,
   updateMemberDisplayName, createInviteToken,
+  getMembers, kickMember, hideMember, unhideMember,
   type Member, type JoinRequest,
 } from '@/lib/db';
 
@@ -61,7 +62,8 @@ export default function MemorialPage() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [tab, setTab] = useState<'messages' | 'media'>('messages');
+  const [tab, setTab] = useState<'messages' | 'media' | 'members'>('messages');
+  const [members, setMembers] = useState<Member[]>([]);
 
   const [content, setContent] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -209,6 +211,32 @@ export default function MemorialPage() {
     setHasRequest(true);
     setRequestStatus('pending');
     setSubmittingRequest(false);
+  }
+
+  async function handleTabChange(t: 'messages' | 'media' | 'members') {
+    setTab(t);
+    if (t === 'members' && space && members.length === 0) {
+      const list = await getMembers(space.id);
+      setMembers(list);
+    }
+  }
+
+  async function handleKick(uid: string) {
+    if (!space || !confirm('이 멤버를 내보내시겠습니까?')) return;
+    await kickMember(space.id, uid);
+    setMembers(prev => prev.filter(m => m.uid !== uid));
+  }
+
+  async function handleToggleHide(targetUid: string) {
+    if (!space || !user || !member) return;
+    const isHidden = member.hidden_member_uids.includes(targetUid);
+    if (isHidden) {
+      await unhideMember(space.id, user.uid, targetUid);
+      setMember(prev => prev ? { ...prev, hidden_member_uids: prev.hidden_member_uids.filter(u => u !== targetUid) } : prev);
+    } else {
+      await hideMember(space.id, user.uid, targetUid);
+      setMember(prev => prev ? { ...prev, hidden_member_uids: [...prev.hidden_member_uids, targetUid] } : prev);
+    }
   }
 
   async function handleGenerateInvite() {
@@ -461,13 +489,17 @@ export default function MemorialPage() {
       {/* 탭 */}
       <div className="max-w-2xl mx-auto px-6">
         <div className="flex border-b border-gray-200 mt-6 mb-6">
-          <button onClick={() => setTab('messages')}
+          <button onClick={() => handleTabChange('messages')}
             className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${tab === 'messages' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
             추모글 ({messages.length})
           </button>
-          <button onClick={() => setTab('media')}
+          <button onClick={() => handleTabChange('media')}
             className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${tab === 'media' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
             사진·영상 ({media.length})
+          </button>
+          <button onClick={() => handleTabChange('members')}
+            className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${tab === 'members' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+            멤버
           </button>
         </div>
 
@@ -493,7 +525,7 @@ export default function MemorialPage() {
 
             {messages.length === 0
               ? <p className="text-center text-gray-400 text-sm py-12">아직 추모글이 없습니다.</p>
-              : messages.map(msg => (
+              : messages.filter(msg => !msg.author_uid || !member?.hidden_member_uids.includes(msg.author_uid)).map(msg => (
                 <div key={msg.id} className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-semibold text-gray-800">{msg.author_name}</span>
@@ -526,7 +558,7 @@ export default function MemorialPage() {
               ? <p className="text-center text-gray-400 text-sm py-12">아직 올라온 사진·영상이 없습니다.</p>
               : (
                 <div className="grid grid-cols-2 gap-3">
-                  {media.map(item => (
+                  {media.filter(item => !item.author_uid || !member?.hidden_member_uids.includes(item.author_uid)).map(item => (
                     <div key={item.id} className="rounded-xl overflow-hidden bg-gray-100 aspect-square relative">
                       {item.type === 'video'
                         ? <video src={item.url} controls className="w-full h-full object-cover" />
@@ -539,6 +571,49 @@ export default function MemorialPage() {
                   ))}
                 </div>
               )
+            }
+          </div>
+        )}
+        {/* 멤버 */}
+        {tab === 'members' && (
+          <div className="flex flex-col gap-3 pb-12">
+            {members.length === 0
+              ? <p className="text-center text-gray-400 text-sm py-12">멤버 목록을 불러오는 중...</p>
+              : members.map(m => {
+                const isMe = m.uid === user?.uid;
+                const isHidden = member?.hidden_member_uids.includes(m.uid) ?? false;
+                return (
+                  <div key={m.uid} className="bg-white rounded-2xl px-5 py-4 border border-gray-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-sm font-semibold text-gray-800">
+                        {m.space_display_name || '(대화명 미설정)'}
+                      </span>
+                      {m.role === 'owner' && (
+                        <span className="ml-2 text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">방장</span>
+                      )}
+                      {isMe && (
+                        <span className="ml-2 text-xs text-blue-400">나</span>
+                      )}
+                    </div>
+                    {!isMe && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleHide(m.uid)}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${isHidden ? 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-white' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+                          {isHidden ? '숨김 해제' : '숨기기'}
+                        </button>
+                        {isOwner && m.role !== 'owner' && (
+                          <button
+                            onClick={() => handleKick(m.uid)}
+                            className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">
+                            내보내기
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             }
           </div>
         )}

@@ -1,6 +1,7 @@
 import {
   doc, getDoc, setDoc, collection, query, where,
-  getDocs, addDoc, updateDoc, serverTimestamp, Timestamp,
+  getDocs, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove,
+  serverTimestamp, Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -98,6 +99,29 @@ export async function rejectJoinRequest(spaceId: string, requestId: string): Pro
   await updateDoc(doc(db, 'memorial_spaces', spaceId, 'join_requests', requestId), {
     status: 'rejected',
     reviewed_at: serverTimestamp(),
+  });
+}
+
+// ---- 멤버 관리 ----
+
+export async function getMembers(spaceId: string): Promise<Member[]> {
+  const snap = await getDocs(collection(db, 'memorial_spaces', spaceId, 'members'));
+  return snap.docs.map(d => ({ uid: d.id, ...d.data() } as Member));
+}
+
+export async function kickMember(spaceId: string, uid: string): Promise<void> {
+  await deleteDoc(doc(db, 'memorial_spaces', spaceId, 'members', uid));
+}
+
+export async function hideMember(spaceId: string, myUid: string, targetUid: string): Promise<void> {
+  await updateDoc(doc(db, 'memorial_spaces', spaceId, 'members', myUid), {
+    hidden_member_uids: arrayUnion(targetUid),
+  });
+}
+
+export async function unhideMember(spaceId: string, myUid: string, targetUid: string): Promise<void> {
+  await updateDoc(doc(db, 'memorial_spaces', spaceId, 'members', myUid), {
+    hidden_member_uids: arrayRemove(targetUid),
   });
 }
 
