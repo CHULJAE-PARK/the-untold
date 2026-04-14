@@ -14,6 +14,7 @@ import {
   getPendingRequests, approveJoinRequest, rejectJoinRequest,
   updateMemberDisplayName, createInviteToken,
   getMembers, kickMember, hideMember, unhideMember,
+  softDeleteSpace,
   type Member, type JoinRequest,
 } from '@/lib/db';
 
@@ -81,6 +82,9 @@ export default function MemorialPage() {
 
   const [inviteLink, setInviteLink] = useState('');
   const [generatingLink, setGeneratingLink] = useState(false);
+  const [showEditNameModal, setShowEditNameModal] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [deletingSpace, setDeletingSpace] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -211,6 +215,27 @@ export default function MemorialPage() {
     setHasRequest(true);
     setRequestStatus('pending');
     setSubmittingRequest(false);
+  }
+
+  function handleOpenEditName() {
+    setEditNameValue(member?.space_display_name || user?.displayName || '');
+    setShowEditNameModal(true);
+  }
+
+  async function handleSaveEditName() {
+    if (!space || !user || !editNameValue.trim()) return;
+    setSavingDisplayName(true);
+    await updateMemberDisplayName(space.id, user.uid, editNameValue.trim());
+    setMember(prev => prev ? { ...prev, space_display_name: editNameValue.trim() } : prev);
+    setShowEditNameModal(false);
+    setSavingDisplayName(false);
+  }
+
+  async function handleDeleteSpace() {
+    if (!space || !confirm(`"${space.name}" 공간을 숨김 처리하시겠습니까?\n멤버들의 요청으로 복구할 수 있습니다.`)) return;
+    setDeletingSpace(true);
+    await softDeleteSpace(space.id);
+    router.push('/dashboard');
   }
 
   async function handleTabChange(t: 'messages' | 'media' | 'members') {
@@ -387,10 +412,44 @@ export default function MemorialPage() {
         </div>
       )}
 
+      {/* 대화명 변경 모달 */}
+      {showEditNameModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl p-8 w-full max-w-sm flex flex-col gap-4">
+            <div>
+              <h2 className="text-base font-bold text-gray-900 mb-1">대화명 변경</h2>
+              <p className="text-sm text-gray-500">이 공간에서 표시될 이름을 변경합니다.</p>
+            </div>
+            <input
+              type="text"
+              value={editNameValue}
+              onChange={e => setEditNameValue(e.target.value)}
+              className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              placeholder="대화명 입력"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowEditNameModal(false)}
+                className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors">
+                취소
+              </button>
+              <button onClick={handleSaveEditName}
+                disabled={savingDisplayName || !editNameValue.trim()}
+                className="flex-1 bg-gray-900 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50">
+                {savingDisplayName ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <nav className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <Link href="/" className="text-base font-bold text-gray-900">The Untold</Link>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-400">{myDisplayName}</span>
+          <button onClick={handleOpenEditName}
+            className="text-xs text-gray-400 hover:text-gray-700 transition-colors underline underline-offset-2">
+            {myDisplayName}
+          </button>
           {user && <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-900 transition-colors">← 내 공간</Link>}
         </div>
       </nav>
@@ -449,6 +508,21 @@ export default function MemorialPage() {
               </div>
             )}
             <p className="text-xs text-gray-400">링크는 7일 후 만료되며, 1회만 사용 가능합니다</p>
+          </div>
+        </div>
+      )}
+
+      {/* 방장: 공간 숨김 처리 */}
+      {isOwner && (
+        <div className="bg-red-50 border-b border-red-100">
+          <div className="max-w-2xl mx-auto px-6 py-3 flex items-center justify-between">
+            <p className="text-xs text-red-400">공간을 숨김 처리하면 대시보드에서 보이지 않습니다</p>
+            <button
+              onClick={handleDeleteSpace}
+              disabled={deletingSpace}
+              className="text-xs text-red-500 border border-red-200 px-4 py-1.5 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50">
+              {deletingSpace ? '처리 중...' : '공간 숨기기'}
+            </button>
           </div>
         </div>
       )}

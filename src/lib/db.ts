@@ -1,7 +1,7 @@
 import {
   doc, getDoc, setDoc, collection, query, where,
   getDocs, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove,
-  serverTimestamp, Timestamp,
+  collectionGroup, serverTimestamp, Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -35,11 +35,18 @@ export async function addMember(
   spaceDisplayName: string | null = null
 ): Promise<void> {
   await setDoc(doc(db, 'memorial_spaces', spaceId, 'members', uid), {
+    uid,
     role,
     space_display_name: spaceDisplayName,
     hidden_member_uids: [],
     joined_at: serverTimestamp(),
   });
+}
+
+// uid로 내가 속한 모든 공간 ID 조회 (collectionGroup 활용)
+export async function getMyMemberSpaceIds(uid: string): Promise<string[]> {
+  const snap = await getDocs(query(collectionGroup(db, 'members'), where('uid', '==', uid)));
+  return snap.docs.map(d => d.ref.parent.parent!.id);
 }
 
 export async function updateMemberDisplayName(
@@ -107,6 +114,29 @@ export async function rejectJoinRequest(spaceId: string, requestId: string): Pro
 export async function getMembers(spaceId: string): Promise<Member[]> {
   const snap = await getDocs(collection(db, 'memorial_spaces', spaceId, 'members'));
   return snap.docs.map(d => ({ uid: d.id, ...d.data() } as Member));
+}
+
+export async function getPendingRequestCount(spaceId: string): Promise<number> {
+  const q = query(
+    collection(db, 'memorial_spaces', spaceId, 'join_requests'),
+    where('status', '==', 'pending')
+  );
+  const snap = await getDocs(q);
+  return snap.size;
+}
+
+export async function softDeleteSpace(spaceId: string): Promise<void> {
+  await updateDoc(doc(db, 'memorial_spaces', spaceId), {
+    is_deleted: true,
+    deleted_at: serverTimestamp(),
+  });
+}
+
+export async function restoreSpace(spaceId: string): Promise<void> {
+  await updateDoc(doc(db, 'memorial_spaces', spaceId), {
+    is_deleted: false,
+    deleted_at: null,
+  });
 }
 
 export async function kickMember(spaceId: string, uid: string): Promise<void> {
