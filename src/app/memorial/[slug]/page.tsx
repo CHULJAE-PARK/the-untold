@@ -12,7 +12,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   getMember, getMyJoinRequest, submitJoinRequest,
   getPendingRequests, approveJoinRequest, rejectJoinRequest,
-  updateMemberDisplayName,
+  updateMemberDisplayName, createInviteToken,
   type Member, type JoinRequest,
 } from '@/lib/db';
 
@@ -76,6 +76,9 @@ export default function MemorialPage() {
 
   const [joinMessage, setJoinMessage] = useState('');
   const [submittingRequest, setSubmittingRequest] = useState(false);
+
+  const [inviteLink, setInviteLink] = useState('');
+  const [generatingLink, setGeneratingLink] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -206,6 +209,15 @@ export default function MemorialPage() {
     setHasRequest(true);
     setRequestStatus('pending');
     setSubmittingRequest(false);
+  }
+
+  async function handleGenerateInvite() {
+    if (!space || !user) return;
+    setGeneratingLink(true);
+    const token = await createInviteToken(space.id, user.uid);
+    const link = `${window.location.origin}/invite/${token}`;
+    setInviteLink(link);
+    setGeneratingLink(false);
   }
 
   async function handleApprove(req: JoinRequest) {
@@ -381,6 +393,34 @@ export default function MemorialPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 방장: 초대 링크 */}
+      {isOwner && (
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-2xl mx-auto px-6 py-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">초대 링크 생성</p>
+              <button
+                onClick={handleGenerateInvite}
+                disabled={generatingLink}
+                className="text-xs bg-gray-900 text-white px-4 py-1.5 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50">
+                {generatingLink ? '생성 중...' : '새 링크 만들기'}
+              </button>
+            </div>
+            {inviteLink && (
+              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-2.5 border border-gray-200">
+                <span className="text-xs text-gray-600 flex-1 truncate">{inviteLink}</span>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(inviteLink); }}
+                  className="text-xs text-gray-900 font-semibold hover:underline whitespace-nowrap">
+                  복사
+                </button>
+              </div>
+            )}
+            <p className="text-xs text-gray-400">링크는 7일 후 만료되며, 1회만 사용 가능합니다</p>
           </div>
         </div>
       )}

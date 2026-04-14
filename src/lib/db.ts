@@ -1,6 +1,6 @@
 import {
   doc, getDoc, setDoc, collection, query, where,
-  getDocs, addDoc, updateDoc, serverTimestamp,
+  getDocs, addDoc, updateDoc, serverTimestamp, Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -98,5 +98,44 @@ export async function rejectJoinRequest(spaceId: string, requestId: string): Pro
   await updateDoc(doc(db, 'memorial_spaces', spaceId, 'join_requests', requestId), {
     status: 'rejected',
     reviewed_at: serverTimestamp(),
+  });
+}
+
+// ---- 초대 토큰 ----
+
+export interface Invite {
+  id: string;
+  space_id: string;
+  created_by: string;
+  used: boolean;
+  used_by: string | null;
+  expires_at: { toDate?: () => Date } | null;
+  created_at: { toDate?: () => Date } | null;
+}
+
+export async function createInviteToken(spaceId: string, createdByUid: string): Promise<string> {
+  const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  const expiresAt = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)); // 7일
+  await setDoc(doc(db, 'invites', token), {
+    space_id: spaceId,
+    created_by: createdByUid,
+    used: false,
+    used_by: null,
+    expires_at: expiresAt,
+    created_at: serverTimestamp(),
+  });
+  return token;
+}
+
+export async function getInviteByToken(token: string): Promise<Invite | null> {
+  const snap = await getDoc(doc(db, 'invites', token));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as Invite;
+}
+
+export async function markInviteUsed(token: string, usedByUid: string): Promise<void> {
+  await updateDoc(doc(db, 'invites', token), {
+    used: true,
+    used_by: usedByUid,
   });
 }
