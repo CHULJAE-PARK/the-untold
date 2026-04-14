@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -15,11 +15,17 @@ import {
   updateMemberDisplayName, createInviteToken,
   getMembers, kickMember, hideMember, unhideMember,
   softDeleteSpace, updateSpace, deleteMessage, deleteMediaItem, hardDeleteSpace,
-  type Member, type JoinRequest,
+  addComment, getComments, deleteComment,
+  type Member, type JoinRequest, type Comment,
 } from '@/lib/db';
 
 function maskName(name: string): string {
   return name.split('').map((c, i) => i % 2 === 1 ? 'O' : c).join('');
+}
+
+function formatMediaDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-');
+  return `${y}년 ${Number(m)}월 ${Number(d)}일`;
 }
 
 interface MemorialSpace {
@@ -47,9 +53,174 @@ interface MediaItem {
   type: 'image' | 'video';
   author_name: string;
   author_uid?: string;
+  caption?: string;
+  media_date?: string;
   created_at: { toDate?: () => Date } | null;
 }
 
+// ---- 댓글 컴포넌트 ----
+function CommentSection({
+  spaceId, parentCollection, parentId, isOwner, userUid, myDisplayName, hiddenUids,
+}: {
+  spaceId: string;
+  parentCollection: 'messages' | 'media';
+  parentId: string;
+  isOwner: boolean;
+  userUid: string;
+  myDisplayName: string;
+  hiddenUids: string[];
+}) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [text, setText] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [count, setCount] = useState(0);
+
+  const loadComments = useCallback(async () => {
+    const list = await getComments(spaceId, parentCollection, parentId);
+    setComments(list);
+    setCount(list.length);
+    setLoaded(true);
+  }, [spaceId, parentCollection, parentId]);
+
+  useEffect(() => {
+    // 처음엔 카운트만 로드
+    loadComments();
+  }, [loadComments]);
+
+  async function handleSubmit() {
+    if (!text.trim()) return;
+    setSubmitting(true);
+    const newComment = await addComment(spaceId, parentCollection, parentId, {
+      author_name: myDisplayName,
+      author_uid: userUid,
+      content: text.trim(),
+    });
+    setComments(prev => [...prev, newComment]);
+    setCount(prev => prev + 1);
+    setText('');
+    setSubmitting(false);
+    setExpanded(true);
+  }
+
+  async function handleDelete(commentId: string) {
+    if (!confirm('댓글을 삭제하시겠습니까?')) return;
+    await deleteComment(spaceId, parentCollection, parentId, commentId);
+    setComments(prev => prev.filter(c => c.id !== commentId));
+    setCount(prev => prev - 1);
+  }
+
+  const visibleComments = comments.filter(c => !hiddenUids.includes(c.author_uid));
+
+  return (
+    <div className="border-t border-gray-100 pt-3 mt-3">
+      {count > 0 && (
+        <button onClick={() => setExpanded(!expanded)}
+          className="text-xs text-gray-400 hover:text-gray-600 transition-colors mb-2">
+          {expanded ? '댓글 접기' : `댓글 ${count}개 보기`}
+        </button>
+      )}
+      {expanded && loaded && (
+        <div className="flex flex-col gap-2 mb-3">
+          {visibleComments.map(c => (
+            <div key={c.id} className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-semibold text-gray-700">{c.author_name}</span>{' '}
+                <span className="text-xs text-gray-500">{c.content}</span>
+              </div>
+              {(isOwner || c.author_uid === userUid) && (
+                <button onClick={() => handleDelete(c.id)}
+                  className="text-xs text-gray-300 hover:text-red-500 transition-colors shrink-0">✕</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input type="text" value={text} onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && !submitting && handleSubmit()}
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-300"
+          placeholder="댓글 달기..." />
+        <button onClick={handleSubmit} disabled={submitting || !text.trim()}
+          className="text-xs font-semibold text-gray-900 hover:text-gray-600 transition-colors disabled:opacity-30 px-2">
+          {submitting ? '...' : '게시'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---- 달력 컴포넌트 ----
+function CalendarView({ mediaDates, selectedDate, onSelectDate }: {
+  mediaDates: string[];
+  selectedDate: string | null;
+  onSelectDate: (date: string | null) => void;
+}) {
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [month, setMonth] = useState(() => new Date().getMonth());
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDayOfWeek = new Date(year, month, 1).getDay();
+  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+  const dateSet = new Set(mediaDates);
+
+  function prevMonth() {
+    if (month === 0) { setMonth(11); setYear(y => y - 1); }
+    else setMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (month === 11) { setMonth(0); setYear(y => y + 1); }
+    else setMonth(m => m + 1);
+  }
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={prevMonth} className="text-gray-400 hover:text-gray-700 transition-colors text-lg px-2">◀</button>
+        <span className="text-sm font-bold text-gray-900">{year}년 {month + 1}월</span>
+        <button onClick={nextMonth} className="text-gray-400 hover:text-gray-700 transition-colors text-lg px-2">▶</button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {dayNames.map(d => (
+          <div key={d} className={`text-center text-xs font-semibold py-1 ${d === '일' ? 'text-red-400' : d === '토' ? 'text-blue-400' : 'text-gray-400'}`}>{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((day, i) => {
+          if (day === null) return <div key={`e${i}`} />;
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const hasMedia = dateSet.has(dateStr);
+          const isSelected = selectedDate === dateStr;
+          return (
+            <button key={dateStr}
+              onClick={() => hasMedia ? onSelectDate(isSelected ? null : dateStr) : undefined}
+              className={`relative aspect-square flex items-center justify-center text-xs rounded-lg transition-colors
+                ${isSelected ? 'bg-gray-900 text-white' : hasMedia ? 'text-gray-900 hover:bg-gray-100 font-semibold cursor-pointer' : 'text-gray-300 cursor-default'}`}>
+              {day}
+              {hasMedia && !isSelected && (
+                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-gray-900" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {selectedDate && (
+        <button onClick={() => onSelectDate(null)}
+          className="mt-4 w-full text-xs text-gray-400 hover:text-gray-600 transition-colors py-1">
+          전체 보기
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---- 메인 페이지 ----
 export default function MemorialPage() {
   const { slug } = useParams<{ slug: string }>();
   const { user, loading: authLoading } = useAuth();
@@ -64,7 +235,7 @@ export default function MemorialPage() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [tab, setTab] = useState<'messages' | 'media' | 'members'>('messages');
+  const [tab, setTab] = useState<'messages' | 'media' | 'calendar' | 'members'>('messages');
   const [members, setMembers] = useState<Member[]>([]);
 
   const [content, setContent] = useState('');
@@ -73,6 +244,12 @@ export default function MemorialPage() {
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const profileInputRef = useRef<HTMLInputElement>(null);
+
+  // 미디어 업로드 폼 상태
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreview, setUploadPreview] = useState('');
+  const [uploadCaption, setUploadCaption] = useState('');
+  const [uploadDate, setUploadDate] = useState('');
 
   const [showDisplayNameModal, setShowDisplayNameModal] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState('');
@@ -94,6 +271,9 @@ export default function MemorialPage() {
   const [settingsDeathYear, setSettingsDeathYear] = useState('');
   const [savingSettings, setSavingSettings] = useState(false);
   const [hardDeleting, setHardDeleting] = useState(false);
+
+  // 달력
+  const [calendarDate, setCalendarDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -174,21 +354,41 @@ export default function MemorialPage() {
     setSubmitting(false);
   }
 
-  async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!space || !e.target.files?.[0]) return;
-    const file = e.target.files[0];
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadFile(file);
+    setUploadPreview(URL.createObjectURL(file));
+  }
+
+  async function handleMediaUpload() {
+    if (!space || !uploadFile) return;
     setUploading(true);
-    const url = await uploadToCloudinary(file);
+    const url = await uploadToCloudinary(uploadFile);
     await addDoc(collection(db, 'memorial_spaces', space.id, 'media'), {
       url,
-      type: file.type.startsWith('video/') ? 'video' : 'image',
+      type: uploadFile.type.startsWith('video/') ? 'video' : 'image',
       author_name: myDisplayName,
       author_uid: user!.uid,
+      caption: uploadCaption.trim(),
+      media_date: uploadDate || null,
       created_at: serverTimestamp(),
     });
     const snap = await getDocs(query(collection(db, 'memorial_spaces', space.id, 'media'), orderBy('created_at', 'desc')));
     setMedia(snap.docs.map(d => ({ id: d.id, ...d.data() } as MediaItem)));
     setUploading(false);
+    setUploadFile(null);
+    setUploadPreview('');
+    setUploadCaption('');
+    setUploadDate('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function handleCancelUpload() {
+    setUploadFile(null);
+    setUploadPreview('');
+    setUploadCaption('');
+    setUploadDate('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
@@ -299,7 +499,7 @@ export default function MemorialPage() {
     setMedia(prev => prev.filter(m => m.id !== mediaId));
   }
 
-  async function handleTabChange(t: 'messages' | 'media' | 'members') {
+  async function handleTabChange(t: 'messages' | 'media' | 'calendar' | 'members') {
     setTab(t);
     if (t === 'members' && space && members.length === 0) {
       const list = await getMembers(space.id);
@@ -444,6 +644,17 @@ export default function MemorialPage() {
     );
   }
 
+  // ---- 미디어 필터 (달력용) ----
+  const filteredMedia = media.filter(item => {
+    if (item.author_uid && member?.hidden_member_uids.includes(item.author_uid)) return false;
+    if (calendarDate && item.media_date !== calendarDate) return false;
+    return true;
+  });
+
+  const mediaDates = media
+    .filter(item => item.media_date && !(item.author_uid && member?.hidden_member_uids.includes(item.author_uid)))
+    .map(item => item.media_date!);
+
   // ---- 멤버 뷰 ----
   return (
     <div className="min-h-screen bg-gray-50">
@@ -549,8 +760,6 @@ export default function MemorialPage() {
                 {savingSettings ? '저장 중...' : '저장'}
               </button>
             </div>
-
-            {/* 위험 영역 */}
             <div className="border-t border-gray-200 pt-4 mt-2">
               <p className="text-xs font-semibold text-red-500 mb-2">위험 영역</p>
               <p className="text-xs text-gray-400 mb-3">공간을 영구 삭제하면 모든 추모글, 사진, 멤버 정보가 삭제되며 복구할 수 없습니다.</p>
@@ -587,7 +796,7 @@ export default function MemorialPage() {
                     <span className="text-sm font-semibold text-gray-800">{req.requester_name}</span>
                     <span className="text-xs text-gray-400">{req.requester_email}</span>
                   </div>
-                  {req.message && <p className="text-sm text-gray-500 italic">"{req.message}"</p>}
+                  {req.message && <p className="text-sm text-gray-500 italic">&quot;{req.message}&quot;</p>}
                   <div className="flex gap-2 mt-1">
                     <button onClick={() => handleApprove(req)}
                       className="flex-1 bg-gray-900 text-white py-1.5 rounded-lg text-xs font-semibold hover:bg-gray-700 transition-colors">
@@ -693,6 +902,10 @@ export default function MemorialPage() {
             className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${tab === 'media' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
             사진·영상 ({media.length})
           </button>
+          <button onClick={() => handleTabChange('calendar')}
+            className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${tab === 'calendar' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+            달력
+          </button>
           <button onClick={() => handleTabChange('members')}
             className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${tab === 'members' ? 'border-gray-900 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
             멤버
@@ -734,53 +947,183 @@ export default function MemorialPage() {
                     </div>
                   </div>
                   <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                  <CommentSection
+                    spaceId={space.id}
+                    parentCollection="messages"
+                    parentId={msg.id}
+                    isOwner={isOwner}
+                    userUid={user!.uid}
+                    myDisplayName={myDisplayName}
+                    hiddenUids={member?.hidden_member_uids || []}
+                  />
                 </div>
               ))
             }
           </div>
         )}
 
-        {/* 사진·영상 */}
+        {/* 사진·영상 (인스타 피드) */}
         {tab === 'media' && (
           <div className="flex flex-col gap-5 pb-12">
+            {/* 업로드 폼 */}
             <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-400">업로더:</span>
                 <span className="text-xs font-semibold text-gray-700">{myDisplayName}</span>
               </div>
-              <button
-                onClick={() => fileInputRef.current?.click()} disabled={uploading}
-                className="border-2 border-dashed border-gray-200 rounded-lg py-8 text-sm text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50">
-                {uploading ? '업로드 중...' : '+ 사진 또는 동영상 선택'}
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleMediaUpload} />
+
+              {!uploadFile ? (
+                <>
+                  <button
+                    onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                    className="border-2 border-dashed border-gray-200 rounded-lg py-8 text-sm text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50">
+                    {uploading ? '업로드 중...' : '+ 사진 또는 동영상 선택'}
+                  </button>
+                  <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileSelect} />
+                </>
+              ) : (
+                <>
+                  {/* 미리보기 */}
+                  <div className="rounded-lg overflow-hidden bg-gray-100 max-h-80 flex items-center justify-center">
+                    {uploadFile.type.startsWith('video/')
+                      ? <video src={uploadPreview} controls className="max-h-80 w-full object-contain" />
+                      : <img src={uploadPreview} alt="미리보기" className="max-h-80 w-full object-contain" />
+                    }
+                  </div>
+                  <textarea
+                    value={uploadCaption} onChange={e => setUploadCaption(e.target.value)} rows={2}
+                    className="border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 resize-none"
+                    placeholder="문구 입력..."
+                  />
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">📅 이 사진·영상의 날짜 (선택)</label>
+                    <input type="date" value={uploadDate} onChange={e => setUploadDate(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300 w-full" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={handleCancelUpload}
+                      className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors">
+                      취소
+                    </button>
+                    <button onClick={handleMediaUpload} disabled={uploading}
+                      className="flex-1 bg-gray-900 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50">
+                      {uploading ? '업로드 중...' : '공유하기'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
 
+            {/* 피드 */}
             {media.length === 0
               ? <p className="text-center text-gray-400 text-sm py-12">아직 올라온 사진·영상이 없습니다.</p>
-              : (
-                <div className="grid grid-cols-2 gap-3">
-                  {media.filter(item => !item.author_uid || !member?.hidden_member_uids.includes(item.author_uid)).map(item => (
-                    <div key={item.id} className="rounded-xl overflow-hidden bg-gray-100 aspect-square relative group">
-                      {item.type === 'video'
-                        ? <video src={item.url} controls className="w-full h-full object-cover" />
-                        : <img src={item.url} alt="" className="w-full h-full object-cover" />
-                      }
-                      {(isOwner || item.author_uid === user?.uid) && (
-                        <button onClick={() => handleDeleteMedia(item.id)}
-                          className="absolute top-2 right-2 w-6 h-6 bg-black/50 hover:bg-red-500 text-white rounded-full flex items-center justify-center text-xs transition-colors opacity-0 group-hover:opacity-100"
-                          title="삭제">✕</button>
-                      )}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent px-3 py-2">
-                        <span className="text-xs text-white">{item.author_name}</span>
+              : media.filter(item => !item.author_uid || !member?.hidden_member_uids.includes(item.author_uid)).map(item => (
+                <div key={item.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  {/* 헤더 */}
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
+                        {item.author_name.charAt(0)}
+                      </div>
+                      <div>
+                        <span className="text-sm font-semibold text-gray-900">{item.author_name}</span>
+                        {item.media_date && (
+                          <span className="text-xs text-gray-400 ml-2">📅 {formatMediaDate(item.media_date)}</span>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">{item.created_at?.toDate?.()?.toLocaleDateString('ko-KR') ?? ''}</span>
+                      {(isOwner || item.author_uid === user?.uid) && (
+                        <button onClick={() => handleDeleteMedia(item.id)}
+                          className="text-xs text-gray-300 hover:text-red-500 transition-colors" title="삭제">✕</button>
+                      )}
+                    </div>
+                  </div>
+                  {/* 미디어 */}
+                  <div className="bg-gray-100">
+                    {item.type === 'video'
+                      ? <video src={item.url} controls className="w-full max-h-[600px] object-contain" />
+                      : <img src={item.url} alt="" className="w-full max-h-[600px] object-contain" />
+                    }
+                  </div>
+                  {/* 캡션 + 댓글 */}
+                  <div className="px-4 py-3">
+                    {item.caption && (
+                      <p className="text-sm text-gray-700 mb-1">
+                        <span className="font-semibold">{item.author_name}</span>{' '}
+                        <span className="whitespace-pre-wrap">{item.caption}</span>
+                      </p>
+                    )}
+                    <CommentSection
+                      spaceId={space.id}
+                      parentCollection="media"
+                      parentId={item.id}
+                      isOwner={isOwner}
+                      userUid={user!.uid}
+                      myDisplayName={myDisplayName}
+                      hiddenUids={member?.hidden_member_uids || []}
+                    />
+                  </div>
                 </div>
-              )
+              ))
             }
           </div>
         )}
+
+        {/* 달력 */}
+        {tab === 'calendar' && (
+          <div className="flex flex-col gap-5 pb-12">
+            <CalendarView
+              mediaDates={mediaDates}
+              selectedDate={calendarDate}
+              onSelectDate={setCalendarDate}
+            />
+            {calendarDate && (
+              <p className="text-xs text-gray-500 text-center">
+                📅 {formatMediaDate(calendarDate)} 의 추억 ({filteredMedia.length}건)
+              </p>
+            )}
+            {filteredMedia.length === 0
+              ? <p className="text-center text-gray-400 text-sm py-12">
+                  {calendarDate ? '이 날짜에 등록된 사진·영상이 없습니다.' : '날짜가 입력된 사진·영상이 없습니다.'}
+                </p>
+              : filteredMedia.map(item => (
+                <div key={item.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
+                        {item.author_name.charAt(0)}
+                      </div>
+                      <div>
+                        <span className="text-sm font-semibold text-gray-900">{item.author_name}</span>
+                        {item.media_date && (
+                          <span className="text-xs text-gray-400 ml-2">📅 {formatMediaDate(item.media_date)}</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-400">{item.created_at?.toDate?.()?.toLocaleDateString('ko-KR') ?? ''}</span>
+                  </div>
+                  <div className="bg-gray-100">
+                    {item.type === 'video'
+                      ? <video src={item.url} controls className="w-full max-h-[600px] object-contain" />
+                      : <img src={item.url} alt="" className="w-full max-h-[600px] object-contain" />
+                    }
+                  </div>
+                  {item.caption && (
+                    <div className="px-4 py-3">
+                      <p className="text-sm text-gray-700">
+                        <span className="font-semibold">{item.author_name}</span>{' '}
+                        <span className="whitespace-pre-wrap">{item.caption}</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))
+            }
+          </div>
+        )}
+
         {/* 멤버 */}
         {tab === 'members' && (
           <div className="flex flex-col gap-3 pb-12">

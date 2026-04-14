@@ -1,7 +1,7 @@
 import {
   doc, getDoc, setDoc, collection, query, where,
   getDocs, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove,
-  collectionGroup, serverTimestamp, Timestamp,
+  collectionGroup, serverTimestamp, Timestamp, orderBy,
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -232,6 +232,52 @@ export async function hardDeleteSpace(spaceId: string): Promise<void> {
 
   // 공간 문서 삭제
   await deleteDoc(doc(db, 'memorial_spaces', spaceId));
+}
+
+// ---- 댓글 ----
+
+export interface Comment {
+  id: string;
+  author_name: string;
+  author_uid: string;
+  content: string;
+  created_at: { toDate?: () => Date } | null;
+}
+
+export async function addComment(
+  spaceId: string,
+  parentCollection: 'messages' | 'media',
+  parentId: string,
+  data: { author_name: string; author_uid: string; content: string }
+): Promise<Comment> {
+  const ref = await addDoc(
+    collection(db, 'memorial_spaces', spaceId, parentCollection, parentId, 'comments'),
+    { ...data, created_at: serverTimestamp() }
+  );
+  return { id: ref.id, ...data, created_at: null };
+}
+
+export async function getComments(
+  spaceId: string,
+  parentCollection: 'messages' | 'media',
+  parentId: string
+): Promise<Comment[]> {
+  const snap = await getDocs(
+    query(
+      collection(db, 'memorial_spaces', spaceId, parentCollection, parentId, 'comments'),
+      orderBy('created_at', 'asc')
+    )
+  );
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Comment));
+}
+
+export async function deleteComment(
+  spaceId: string,
+  parentCollection: 'messages' | 'media',
+  parentId: string,
+  commentId: string
+): Promise<void> {
+  await deleteDoc(doc(db, 'memorial_spaces', spaceId, parentCollection, parentId, 'comments', commentId));
 }
 
 export async function deleteUserAccount(uid: string): Promise<void> {
