@@ -56,20 +56,26 @@ export default function MemorialPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const q = query(collection(db, 'memorial_spaces'), where('slug', '==', slug));
-      const snap = await getDocs(q);
-      if (snap.empty) { setNotFound(true); setLoading(false); return; }
-      const spaceDoc = snap.docs[0];
-      const spaceData = { id: spaceDoc.id, ...spaceDoc.data() } as MemorialSpace;
-      setSpace(spaceData);
+      try {
+        const q = query(collection(db, 'memorial_spaces'), where('slug', '==', slug));
+        const snap = await getDocs(q);
+        if (snap.empty) { setNotFound(true); setLoading(false); return; }
+        const spaceDoc = snap.docs[0];
+        const spaceData = { id: spaceDoc.id, ...spaceDoc.data() } as MemorialSpace;
+        setSpace(spaceData);
 
-      const [msgSnap, mediaSnap] = await Promise.all([
-        getDocs(query(collection(db, 'memorial_spaces', spaceDoc.id, 'messages'), orderBy('created_at', 'desc'))),
-        getDocs(query(collection(db, 'memorial_spaces', spaceDoc.id, 'media'), orderBy('created_at', 'desc'))),
-      ]);
-      setMessages(msgSnap.docs.map(d => ({ id: d.id, ...d.data() } as Message)));
-      setMedia(mediaSnap.docs.map(d => ({ id: d.id, ...d.data() } as MediaItem)));
-      setLoading(false);
+        const [msgSnap, mediaSnap] = await Promise.all([
+          getDocs(query(collection(db, 'memorial_spaces', spaceDoc.id, 'messages'), orderBy('created_at', 'desc'))),
+          getDocs(query(collection(db, 'memorial_spaces', spaceDoc.id, 'media'), orderBy('created_at', 'desc'))),
+        ]);
+        setMessages(msgSnap.docs.map(d => ({ id: d.id, ...d.data() } as Message)));
+        setMedia(mediaSnap.docs.map(d => ({ id: d.id, ...d.data() } as MediaItem)));
+        setLoading(false);
+      } catch (err) {
+        console.error('[memorial] fetchData error:', err);
+        setNotFound(true);
+        setLoading(false);
+      }
     }
     fetchData();
   }, [slug]);

@@ -8,11 +8,13 @@ import { useAuth } from '@/lib/auth-context';
 import { db } from '@/lib/firebase';
 
 function toSlug(text: string) {
-  return text
+  const ascii = text
     .toLowerCase()
-    .replace(/[^a-z0-9가-힣]/g, '-')
+    .replace(/[^a-z0-9]/g, '-')
     .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '') + '-' + Math.random().toString(36).slice(2, 7);
+    .replace(/^-|-$/g, '');
+  const suffix = Math.random().toString(36).slice(2, 7);
+  return ascii ? `${ascii}-${suffix}` : suffix;
 }
 
 export default function CreatePage() {
