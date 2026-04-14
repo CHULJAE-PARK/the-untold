@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/lib/auth-context';
 import { db } from '@/lib/firebase';
+import { addMember } from '@/lib/db';
 
 function toSlug(text: string) {
   const ascii = text
@@ -36,17 +37,18 @@ export default function CreatePage() {
     setSaving(true);
     try {
       const slug = toSlug(name.trim());
-      await addDoc(collection(db, 'memorial_spaces'), {
+      const docRef = await addDoc(collection(db, 'memorial_spaces'), {
         created_by: user!.uid,
         name: name.trim(),
         slug,
         birth_year: birthYear ? parseInt(birthYear) : null,
         death_year: deathYear ? parseInt(deathYear) : null,
         bio: bio.trim() || null,
-        is_public: true,
+        is_public: false,
         created_at: serverTimestamp(),
         updated_at: serverTimestamp(),
       });
+      await addMember(docRef.id, user!.uid, 'owner', user!.displayName || name.trim());
       router.push('/dashboard');
     } catch {
       setError('저장 중 오류가 발생했습니다.');
